@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MiniAgent: fake 单次",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mini_agent",
+      "args": ["--provider", "fake", "你好"],
+      "cwd": "${workspaceFolder}/mini_agent",
+      "python": "${workspaceFolder}/mini_agent/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "MiniAgent: fake REPL",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mini_agent",
+      "args": ["--provider", "fake", "-v"],
+      "cwd": "${workspaceFolder}/mini_agent",
+      "python": "${workspaceFolder}/mini_agent/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "MiniAgent: DeepSeek 单次",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mini_agent",
+      "args": ["--provider", "deepseek", "用一句话介绍你自己"],
+      "cwd": "${workspaceFolder}/mini_agent",
+      "python": "${workspaceFolder}/mini_agent/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "pytest: 当前测试文件",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q", "${file}"],
+      "cwd": "${workspaceFolder}/mini_agent",
+      "python": "${workspaceFolder}/mini_agent/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

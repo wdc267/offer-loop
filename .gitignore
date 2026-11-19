@@ -1,0 +1,88 @@
+# ============================================================
+# OfferLoop 根级 .gitignore
+# 原则：源码、文档、锁文件、共享配置要提交；
+#       依赖、构建产物、缓存、密钥、运行时数据不提交。
+# ============================================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# ---------- Node / 前端（后续 Vue 3 + Vite） ----------
+node_modules/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+coverage/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 密钥与环境变量 ----------
+# 只保留模板文件，真实 .env 一律不提交
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+secrets/
+credentials.json
+
+# ---------- 数据库与运行时数据 ----------
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+uploads/
+
+# ---------- 日志与临时文件 ----------
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# ---------- 编辑器 / 操作系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+
+# VS Code / Cursor：只保留可共享的调试与工作区配置
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# ---------- 本地参考文档（不随仓库提交） ----------
+参考文档/
+
+# ---------- 本地 AI 助手配置 ----------
+.claude/settings.local.json
+CLAUDE.local.md
