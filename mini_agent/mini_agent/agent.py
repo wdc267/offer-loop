@@ -1,18 +1,20 @@
-"""Agent Loop 本体（s01）。
+"""Agent Loop 本体（s01 循环 + s02 工具分发）。
 
 主循环只做三件事：调模型、记历史、判断是否继续。
-「判断是否继续」被抽到 _on_assistant_turn，作为 s02 接入工具的唯一扩展缝。
+「判断是否继续」被抽到 _on_assistant_turn，是接入工具的唯一扩展缝。
 主循环本身不感知任何具体工具。
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from typing import Sequence
 
-from .errors import InvalidInputError, UnsupportedToolCallError
+from .errors import InvalidInputError
 from .models import AgentResult, AssistantTurn, Message, StopReason, Usage
 from .providers.base import LLMProvider
+from .tools import ToolDispatcher, ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,22 @@ class MiniAgent:
         temperature: float = 0.3,
         max_tokens: int | None = None,
         initial_messages: Sequence[Message] | None = None,
+        tools: ToolRegistry | None = None,
     ) -> None:
+        """创建 Agent 并准备消息历史。
+
+        参数：
+            provider: 模型调用实现（真实 API 或 FakeProvider）。
+            system_prompt: 系统提示词；为空时不写入历史。
+            max_steps: 单次 run() 最多调用模型的次数，必须 >= 1。
+            temperature: 采样温度，透传给 Provider。
+            max_tokens: 单次生成上限；None 表示不传该参数。
+            initial_messages: 构造时预置的历史消息，会被复制一份。
+            tools: 工具注册表；为空或 None 时 Agent 不具备任何工具。
+
+        异常：
+            ValueError: max_steps 小于 1 时抛出。
+        """
         if max_steps < 1:
             raise ValueError("max_steps 必须 >= 1")
 
@@ -37,6 +54,10 @@ class MiniAgent:
         self._max_steps = max_steps
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._registry = tools if tools and len(tools) else None
+        self._dispatcher = (
+            ToolDispatcher(self._registry) if self._registry is not None else None
+        )
 
         seed: list[Message] = []
         if system_prompt:
@@ -52,15 +73,30 @@ class MiniAgent:
 
     @property
     def history(self) -> tuple[Message, ...]:
-        """当前历史（不可变快照）。"""
+        """返回当前消息历史的不可变快照。
+
+        返回值：
+            Message 组成的 tuple；调用方无法通过它修改 Agent 内部状态。
+        """
         return tuple(self._history)
 
     def reset(self) -> None:
-        """清空对话历史，保留 system prompt。"""
+        """清空对话历史，只保留构造时的 system prompt。"""
         self._history = list(self._seed)
 
     async def run(self, user_input: str) -> AgentResult:
-        """处理一次用户输入，直到模型给出最终回答或用完步数。"""
+        """处理一次用户输入，直到模型给出最终回答或用完步数。
+
+        参数：
+            user_input: 用户输入文本；会自动去掉首尾空白。
+
+        返回值：
+            AgentResult，包含最终文本、停止原因、步数和累计 token 用量。
+
+        异常：
+            InvalidInputError: 输入为空或不是字符串时抛出。
+            ProviderError: 模型调用失败时向上传播。
+        """
         if not isinstance(user_input, str) or not user_input.strip():
             raise InvalidInputError("用户输入不能为空")
 
@@ -77,6 +113,7 @@ class MiniAgent:
                 snapshot,
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
+                tools=self._registry.specs() if self._registry is not None else None,
             )
             elapsed_ms = (time.perf_counter() - started) * 1000
 
@@ -137,27 +174,31 @@ class MiniAgent:
         )
 
     async def _on_assistant_turn(self, turn: AssistantTurn) -> bool:
-        """决定这一步之后是否继续循环。
+        """处理模型的一次输出，决定是否继续循环。
+
+        参数：
+            turn: 模型本次调用的输出；若带 tool_calls 则逐个执行并回填。
 
         返回值：
-            True  = 已经向历史补好下一步需要的内容（s02 是 tool 结果），
+            True  = 已经向历史补好下一步需要的内容（这里就是 tool 结果），
                     请再调用一次模型。
             False = 本轮结束，使用 turn.text 作为最终回答。
 
-        s01 约定：
-            - 收到 tool_calls -> 抛 UnsupportedToolCallError（工具属于 s02）；
-            - 其余情况       -> 返回 False。
-
-        s02 约定：
-            - 解析 turn.tool_calls 的参数；
-            - 调用 ToolDispatcher 执行；
-            - 为每个调用追加 Message.tool(tool_call_id=..., content=...)；
-            - 返回 True。
-        主循环结构不需要任何修改。
+        工具调用必须逐个配平：每个 tool_call_id 都要有一条 tool 消息，
+        否则下一次请求会被 OpenAI 兼容端点拒绝。
         """
-        if turn.tool_calls:
-            raise UnsupportedToolCallError(
-                "s01 不支持工具调用；工具分发将在 s02 的 "
-                "_on_assistant_turn() 中实现。"
-            )
-        return False
+        if not turn.tool_calls:
+            return False
+
+        if self._dispatcher is None:
+            # 模型要求工具但 Agent 没注册：回填错误让模型改口，
+            # 不能直接结束，否则历史里会留下没有配对的 tool_calls。
+            for call in turn.tool_calls:
+                self._history.append(
+                    Message.tool(call.id, "工具执行失败：本 Agent 未注册任何工具")
+                )
+            return True
+
+        for call in turn.tool_calls:
+            self._history.append(await self._dispatcher.dispatch(call))
+        return True

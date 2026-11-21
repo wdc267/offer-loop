@@ -5,6 +5,7 @@
 库代码不在 import 时自动读 .env；只有显式调用 load_settings() 才会加载。
 这样测试可以完全控制配置来源，也不会因为某个目录下的 .env 改变行为。
 """
+
 from __future__ import annotations
 
 import os
@@ -37,6 +38,12 @@ class Settings:
     temperature: float = DEFAULT_TEMPERATURE
 
     def __post_init__(self) -> None:
+        """校验字段取值范围，配置非法时在构造阶段立即失败。
+
+        异常：
+            ConfigError: provider 不支持、URL/model 为空、
+                max_steps 小于 1 或 temperature 超出 [0, 2] 时抛出。
+        """
         if self.provider not in SUPPORTED_PROVIDERS:
             raise ConfigError(
                 f"不支持的 provider: {self.provider!r}，可选 {SUPPORTED_PROVIDERS}"
@@ -46,7 +53,9 @@ class Settings:
         if not self.model:
             raise ConfigError("MINI_AGENT_MODEL 不能为空")
         if self.max_steps < 1:
-            raise ConfigError(f"MINI_AGENT_MAX_STEPS 必须 >= 1，当前为 {self.max_steps}")
+            raise ConfigError(
+                f"MINI_AGENT_MAX_STEPS 必须 >= 1，当前为 {self.max_steps}"
+            )
         if not 0.0 <= self.temperature <= 2.0:
             raise ConfigError(
                 f"MINI_AGENT_TEMPERATURE 必须在 [0, 2] 之间，当前为 {self.temperature}"
@@ -54,6 +63,15 @@ class Settings:
 
 
 def _read_str(name: str, default: str | None = None) -> str | None:
+    """读取并清理一个字符串环境变量。
+
+    参数：
+        name: 环境变量名。
+        default: 变量不存在或为空时返回的默认值。
+
+    返回值：
+        去掉首尾空白后的值；为空时返回 default。
+    """
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -62,6 +80,18 @@ def _read_str(name: str, default: str | None = None) -> str | None:
 
 
 def _read_int(name: str, default: int) -> int:
+    """读取整数环境变量。
+
+    参数：
+        name: 环境变量名。
+        default: 变量不存在时使用的默认值。
+
+    返回值：
+        解析后的整数。
+
+    异常：
+        ConfigError: 变量存在但不是整数时抛出。
+    """
     raw = _read_str(name)
     if raw is None:
         return default
@@ -72,6 +102,18 @@ def _read_int(name: str, default: int) -> int:
 
 
 def _read_float(name: str, default: float) -> float:
+    """读取浮点数环境变量。
+
+    参数：
+        name: 环境变量名。
+        default: 变量不存在时使用的默认值。
+
+    返回值：
+        解析后的浮点数。
+
+    异常：
+        ConfigError: 变量存在但不是数字时抛出。
+    """
     raw = _read_str(name)
     if raw is None:
         return default
@@ -92,6 +134,9 @@ def load_settings(
         env_file: 显式指定 .env 路径；默认使用项目根目录下的 .env。
         load_env: 是否读取 .env。测试通常传 False 以完全隔离。
 
+    返回值：
+        校验通过的 Settings 对象。
+
     只允许 .env 补充进程里不存在的变量（override=False），
     这样临时覆盖和 CI 环境变量总是优先。
     """
@@ -102,7 +147,9 @@ def load_settings(
             # 否则第一个键会变成 "﻿MINI_AGENT_API_KEY"，表现为「明明写了却读不到」。
             load_dotenv(dotenv_path=path, override=False, encoding="utf-8-sig")
 
-    provider = (_read_str("MINI_AGENT_PROVIDER", DEFAULT_PROVIDER) or DEFAULT_PROVIDER).lower()
+    provider = (
+        _read_str("MINI_AGENT_PROVIDER", DEFAULT_PROVIDER) or DEFAULT_PROVIDER
+    ).lower()
 
     return Settings(
         provider=provider,

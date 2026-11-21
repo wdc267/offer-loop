@@ -7,13 +7,14 @@
 
 行为是确定性的：不睡眠、不随机、不访问网络。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Sequence
 
 from ..errors import ScriptExhaustedError
-from ..models import AssistantTurn, Message, Usage
+from ..models import AssistantTurn, Message, ToolSpec, Usage
 
 ScriptItem = str | AssistantTurn | Exception
 
@@ -25,6 +26,7 @@ class RecordedCall:
     messages: tuple[Message, ...]
     temperature: float
     max_tokens: int | None
+    tools: tuple[ToolSpec, ...] = ()
 
 
 class FakeProvider:
@@ -37,7 +39,8 @@ class FakeProvider:
         *,
         echo: bool = True,
     ) -> None:
-        """
+        """创建脚本化 Provider。
+
         参数：
             script: 按顺序消费的脚本项。
                 - str: 返回一条 finish_reason="stop" 的文本
@@ -54,7 +57,11 @@ class FakeProvider:
 
     @property
     def calls(self) -> tuple[RecordedCall, ...]:
-        """已经发生的调用记录（不可变快照）。"""
+        """返回已经发生的调用记录。
+
+        返回值：
+            RecordedCall 组成的不可变快照，供测试断言。
+        """
         return tuple(self._calls)
 
     async def generate(
@@ -63,12 +70,29 @@ class FakeProvider:
         *,
         temperature: float = 0.3,
         max_tokens: int | None = None,
+        tools: Sequence[ToolSpec] | None = None,
     ) -> AssistantTurn:
+        """记录本次调用并按脚本返回预设结果。
+
+        参数：
+            messages: 本次调用收到的完整消息历史。
+            temperature: 采样温度，仅记录不生效。
+            max_tokens: 生成上限，仅记录不生效。
+            tools: 工具声明，仅记录用于断言。
+
+        返回值：
+            脚本中的 AssistantTurn，或按 echo 规则生成的兜底回复。
+
+        异常：
+            ScriptExhaustedError: 脚本耗尽且 echo=False 时抛出。
+            脚本中的 Exception: 原样抛出，用于测试故障路径。
+        """
         self._calls.append(
             RecordedCall(
                 messages=tuple(messages),
                 temperature=temperature,
                 max_tokens=max_tokens,
+                tools=tuple(tools or ()),
             )
         )
 
@@ -98,4 +122,5 @@ class FakeProvider:
         )
 
     async def aclose(self) -> None:
+        """FakeProvider 不持有资源，空实现。"""
         return None

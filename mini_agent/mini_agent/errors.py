@@ -7,6 +7,7 @@
 
 这样调用方不会把「模型没话说」和「网络挂了」混为一谈。
 """
+
 from __future__ import annotations
 
 
@@ -25,8 +26,16 @@ class InvalidInputError(MiniAgentError):
     """调用方传入了非法输入，例如空白用户消息。"""
 
 
-class UnsupportedToolCallError(MiniAgentError):
-    """s01 不支持工具调用；收到 tool_calls 时抛出，提示升级到 s02。"""
+class ToolError(MiniAgentError):
+    """工具执行失败（文件不存在、格式不支持等）。
+
+    Dispatcher 会捕获它并转换成 tool 消息回填给模型，
+    而不是让异常打断 Agent 循环。
+    """
+
+
+class DocumentError(ToolError):
+    """文档无法读取或解析。"""
 
 
 class ScriptExhaustedError(MiniAgentError):

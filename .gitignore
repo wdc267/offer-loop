@@ -86,3 +86,4 @@ desktop.ini
 # ---------- 本地 AI 助手配置 ----------
 .claude/settings.local.json
 CLAUDE.local.md
+CLAUDE.md

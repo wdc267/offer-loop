@@ -8,6 +8,7 @@
 每轮都新建事件循环会关闭 AsyncOpenAI 绑定的 HTTP 客户端，
 第二轮会报 "Event loop is closed"。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,12 +20,15 @@ from typing import Sequence
 
 from .agent import MiniAgent
 from .config import Settings, load_settings
-from .errors import ConfigError, ProviderError, UnsupportedToolCallError
+from .errors import ConfigError, ProviderError
 from .models import AgentResult, Message, StopReason
 from .providers import create_provider
+from .tools import create_default_registry
 
 DEFAULT_SYSTEM_PROMPT = (
-    "你是 MiniAgent，一个用于学习 Agent Loop 的最小助手。回答简洁、准确。"
+    "你是 MiniAgent，一个求职助手。用户提供简历或 JD 的文件路径时，"
+    "先调用 read_resume / read_jd 读取原文；需要结构事实时调用 analyze_resume。"
+    "不要臆造文件内容，读取失败时如实告知用户。回答简洁、准确。"
 )
 
 _HELP = """可用命令：
@@ -37,9 +41,14 @@ logger = logging.getLogger("mini_agent.cli")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构建命令行参数解析器。
+
+    返回值：
+        配置好 prompt 与各覆盖选项的 ArgumentParser。
+    """
     parser = argparse.ArgumentParser(
         prog="mini-agent",
-        description="MiniAgent s01：最小 Agent Loop",
+        description="MiniAgent s02：Agent Loop + Tool Use",
     )
     parser.add_argument(
         "prompt",
@@ -61,13 +70,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--temperature", type=float, default=None, help="覆盖 MINI_AGENT_TEMPERATURE"
     )
     parser.add_argument("--system", default=None, help="覆盖默认 system prompt")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="输出 DEBUG 日志"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="输出 DEBUG 日志")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """CLI 入口：解析参数、加载配置并运行单次模式或 REPL。
+
+    参数：
+        argv: 命令行参数列表；None 时读取 sys.argv。
+
+    返回值：
+        进程退出码：0 正常，1 配置错误，2 模型调用失败，130 用户中断。
+    """
     _ensure_utf8_stdio()
     args = build_parser().parse_args(argv)
     _configure_logging(args.verbose)
@@ -99,6 +114,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 async def _amain(settings: Settings, args: argparse.Namespace) -> int:
+    """在事件循环内创建 Provider / Agent，并分发到单次模式或 REPL。
+
+    参数：
+        settings: 已加载并合并命令行覆盖项的配置。
+        args: 命令行解析结果，提供 prompt、system 等字段。
+
+    返回值：
+        与 main() 相同的进程退出码。
+    """
     try:
         provider = create_provider(settings)
     except ConfigError as exc:
@@ -111,6 +135,7 @@ async def _amain(settings: Settings, args: argparse.Namespace) -> int:
         system_prompt=args.system or DEFAULT_SYSTEM_PROMPT,
         max_steps=settings.max_steps,
         temperature=settings.temperature,
+        tools=create_default_registry(),
     )
 
     logger.info(
@@ -131,13 +156,19 @@ async def _amain(settings: Settings, args: argparse.Namespace) -> int:
 
 
 async def _run_once(agent: MiniAgent, prompt: str) -> int:
+    """执行单次问答并打印结果。
+
+    参数：
+        agent: 已配置好的 MiniAgent。
+        prompt: 用户问题文本。
+
+    返回值：
+        0 表示成功，2 表示模型调用失败。
+    """
     try:
         result = await agent.run(prompt)
     except ProviderError as exc:
         print(f"模型调用失败：{exc}", file=sys.stderr)
-        return 2
-    except UnsupportedToolCallError as exc:
-        print(str(exc), file=sys.stderr)
         return 2
 
     _print_result(result)
@@ -145,7 +176,15 @@ async def _run_once(agent: MiniAgent, prompt: str) -> int:
 
 
 async def _repl(agent: MiniAgent) -> int:
-    print("MiniAgent s01 REPL。输入 /help 查看命令，/exit 退出。")
+    """运行交互式 REPL，直到用户退出或输入结束。
+
+    参数：
+        agent: 复用的 MiniAgent；/reset 会清空其历史。
+
+    返回值：
+        0 正常退出，130 表示 Ctrl+C 中断。
+    """
+    print("MiniAgent s02 REPL。输入 /help 查看命令，/exit 退出。")
     while True:
         try:
             line = input("you> ")
@@ -177,10 +216,6 @@ async def _repl(agent: MiniAgent) -> int:
         except ProviderError as exc:
             print(f"模型调用失败：{exc}", file=sys.stderr)
             continue
-        except UnsupportedToolCallError as exc:
-            print(f"{exc} 本轮历史已重置。", file=sys.stderr)
-            agent.reset()
-            continue
         except KeyboardInterrupt:
             print(file=sys.stderr)
             return 130
@@ -195,6 +230,11 @@ async def _repl(agent: MiniAgent) -> int:
 
 
 def _print_result(result: AgentResult) -> None:
+    """把 AgentResult 的内容与停止原因打印到 stdout/stderr。
+
+    参数：
+        result: 一次 run() 的返回结果。
+    """
     if result.text:
         print(result.text)
     if result.stop_reason is StopReason.EMPTY_RESPONSE:
@@ -206,16 +246,32 @@ def _print_result(result: AgentResult) -> None:
 
 
 def _print_history(history: Sequence[Message]) -> None:
+    """打印消息历史摘要；tool 消息只显示字符数，避免泄露简历正文。
+
+    参数：
+        history: 要展示的消息序列。
+    """
     if not history:
         print("（历史为空）")
         return
     for index, message in enumerate(history, start=1):
+        if message.role == "tool":
+            # 工具结果里是简历 / JD 正文，只显示长度。
+            print(
+                f"{index:02d} {message.role:9s} [工具结果 {len(message.content)} 字符]"
+            )
+            continue
         preview = message.content.replace("\n", " ")[:60]
         suffix = f" tool_calls={len(message.tool_calls)}" if message.tool_calls else ""
         print(f"{index:02d} {message.role:9s} {preview!r}{suffix}")
 
 
 def _configure_logging(verbose: bool) -> None:
+    """配置全局日志格式与级别。
+
+    参数：
+        verbose: True 时输出 DEBUG 级别，否则输出 INFO。
+    """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)-7s %(name)s %(message)s",

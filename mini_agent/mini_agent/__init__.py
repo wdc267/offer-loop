@@ -1,7 +1,9 @@
-"""MiniAgent s01：手写的最小 Agent Loop。"""
+"""MiniAgent s02：手写的最小 Agent Loop + Tool Use。"""
+
 from .agent import MiniAgent
 from .errors import (
     ConfigError,
+    DocumentError,
     InvalidInputError,
     MiniAgentError,
     ProviderAuthError,
@@ -11,7 +13,7 @@ from .errors import (
     ProviderResponseError,
     ProviderTimeoutError,
     ScriptExhaustedError,
-    UnsupportedToolCallError,
+    ToolError,
 )
 from .models import (
     AgentResult,
@@ -20,8 +22,10 @@ from .models import (
     Role,
     StopReason,
     ToolCall,
+    ToolSpec,
     Usage,
 )
+from .tools import ToolRegistry, create_default_registry
 
 __all__ = [
     "MiniAgent",
@@ -31,11 +35,15 @@ __all__ = [
     "Role",
     "StopReason",
     "ToolCall",
+    "ToolSpec",
     "Usage",
+    "ToolRegistry",
+    "create_default_registry",
     "MiniAgentError",
     "ConfigError",
     "InvalidInputError",
-    "UnsupportedToolCallError",
+    "ToolError",
+    "DocumentError",
     "ScriptExhaustedError",
     "ProviderError",
     "ProviderAuthError",

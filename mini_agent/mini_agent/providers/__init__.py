@@ -4,6 +4,7 @@
 - 纯离线测试即使没有安装 openai 也能 import 本包；
 - openai SDK 只出现在 openai_compat.py 中。
 """
+
 from __future__ import annotations
 
 from ..config import Settings
@@ -21,6 +22,17 @@ __all__ = [
 
 
 def create_provider(settings: Settings) -> LLMProvider:
+    """根据配置创建对应的 Provider。
+
+    参数：
+        settings: 已校验的配置；provider 字段决定具体实现。
+
+    返回值：
+        FakeProvider 或 OpenAICompatibleProvider 实例。
+
+    异常：
+        ConfigError: 真实 provider 缺少 API key，或 provider 不受支持时抛出。
+    """
     if settings.provider == "fake":
         return FakeProvider()
 
