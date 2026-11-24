@@ -25,10 +25,10 @@ from .models import AgentResult, Message, StopReason
 from .providers import create_provider
 from .tools import create_default_registry
 
+# 只写角色和事实约束；选择哪个工具由各工具 description 决定。
 DEFAULT_SYSTEM_PROMPT = (
-    "你是 MiniAgent，一个求职助手。用户提供简历或 JD 的文件路径时，"
-    "先调用 read_resume / read_jd 读取原文；需要结构事实时调用 analyze_resume。"
-    "不要臆造文件内容，读取失败时如实告知用户。回答简洁、准确。"
+    "你是 MiniAgent，一个求职助手。不要臆造文件内容；"
+    "读取失败或格式不支持时如实告知用户。回答简洁、准确。"
 )
 
 _HELP = """可用命令：
@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="mini-agent",
-        description="MiniAgent s02：Agent Loop + Tool Use",
+        description="MiniAgent s03：Agent Loop + Tool Use + Permission",
     )
     parser.add_argument(
         "prompt",
@@ -184,7 +184,7 @@ async def _repl(agent: MiniAgent) -> int:
     返回值：
         0 正常退出，130 表示 Ctrl+C 中断。
     """
-    print("MiniAgent s02 REPL。输入 /help 查看命令，/exit 退出。")
+    print("MiniAgent s03 REPL。输入 /help 查看命令，/exit 退出。")
     while True:
         try:
             line = input("you> ")

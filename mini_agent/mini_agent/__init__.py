@@ -1,4 +1,4 @@
-"""MiniAgent s02：手写的最小 Agent Loop + Tool Use。"""
+"""MiniAgent s03：最小 Agent Loop + Tool Use + Permission。"""
 
 from .agent import MiniAgent
 from .errors import (
@@ -25,7 +25,22 @@ from .models import (
     ToolSpec,
     Usage,
 )
-from .tools import ToolRegistry, create_default_registry
+from .permissions import (
+    DENY_LIST,
+    PERMISSION_RULES,
+    Approver,
+    PermissionRequest,
+    ask_user,
+    check_deny_list,
+    check_permission,
+    check_rules,
+)
+from .tools import (
+    DeleteResumeTool,
+    ToolRegistry,
+    UpdateResumeTool,
+    create_default_registry,
+)
 
 __all__ = [
     "MiniAgent",
@@ -38,7 +53,17 @@ __all__ = [
     "ToolSpec",
     "Usage",
     "ToolRegistry",
+    "UpdateResumeTool",
+    "DeleteResumeTool",
     "create_default_registry",
+    "Approver",
+    "PermissionRequest",
+    "DENY_LIST",
+    "PERMISSION_RULES",
+    "check_deny_list",
+    "check_rules",
+    "check_permission",
+    "ask_user",
     "MiniAgentError",
     "ConfigError",
     "InvalidInputError",

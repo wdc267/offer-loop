@@ -1,4 +1,4 @@
-"""Agent Loop 本体（s01 循环 + s02 工具分发）。
+"""Agent Loop 本体（s01 循环 + s02 工具分发 + s03 操作授权）。
 
 主循环只做三件事：调模型、记历史、判断是否继续。
 「判断是否继续」被抽到 _on_assistant_turn，是接入工具的唯一扩展缝。
@@ -13,6 +13,7 @@ from typing import Sequence
 
 from .errors import InvalidInputError
 from .models import AgentResult, AssistantTurn, Message, StopReason, Usage
+from .permissions import Approver
 from .providers.base import LLMProvider
 from .tools import ToolDispatcher, ToolRegistry
 
@@ -32,6 +33,7 @@ class MiniAgent:
         max_tokens: int | None = None,
         initial_messages: Sequence[Message] | None = None,
         tools: ToolRegistry | None = None,
+        approver: Approver | None = None,
     ) -> None:
         """创建 Agent 并准备消息历史。
 
@@ -43,6 +45,7 @@ class MiniAgent:
             max_tokens: 单次生成上限；None 表示不传该参数。
             initial_messages: 构造时预置的历史消息，会被复制一份。
             tools: 工具注册表；为空或 None 时 Agent 不具备任何工具。
+            approver: 规则命中后的用户确认函数；None 时使用交互式 ask_user。
 
         异常：
             ValueError: max_steps 小于 1 时抛出。
@@ -56,7 +59,9 @@ class MiniAgent:
         self._max_tokens = max_tokens
         self._registry = tools if tools and len(tools) else None
         self._dispatcher = (
-            ToolDispatcher(self._registry) if self._registry is not None else None
+            ToolDispatcher(self._registry, approver)
+            if self._registry is not None
+            else None
         )
 
         seed: list[Message] = []
