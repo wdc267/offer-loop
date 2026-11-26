@@ -58,6 +58,7 @@ credentials.json
 *.sqlite
 *.sqlite3
 uploads/
+/workspace/
 
 # ---------- 日志与临时文件 ----------
 *.log
