@@ -30,13 +30,14 @@ def run_hooks(hooks, event, *args):
     return None
 
 
-def run_tool(call, tools, hooks):
+def run_tool(call, tools, hooks, *, on_result=None):
     """执行一次工具调用；错误和拒绝也作为工具结果回填。
 
     参数：
         call: 带 id、工具名和 JSON 参数的模型调用。
         tools: 工具名到函数的映射。
         hooks: 事件名到回调列表的映射。
+        on_result: 可选的宿主结果登记函数，接收消息、工具名、参数与状态。
 
     返回值：
         带原始 tool_call_id 的 tool 消息。
@@ -61,15 +62,19 @@ def run_tool(call, tools, hooks):
         status, result = "error", f"工具失败：{exc}"
 
     run_hooks(hooks, "PostToolUse", name, status, result)
-    return {**message, "content": result}
+    message["content"] = result
+    if on_result is not None:
+        on_result(message, name, args, status)
+    return message
 
 
-def default_hooks(workspace, *, confirm=input):
+def default_hooks(workspace, *, confirm=input, artifacts=None):
     """把路径约束、修改与删除审批、日志挂到生命周期事件上。
 
     参数：
         workspace: 文件工具可访问的工作区根目录。
         confirm: 读取审批结果的函数；默认读取终端输入。
+        artifacts: 可选的当前会话归档存储，用于分页读取边界校验。
 
     返回值：
         默认事件和回调的映射。
@@ -94,6 +99,16 @@ def default_hooks(workspace, *, confirm=input):
         返回值：
             拒绝原因；允许执行时返回 None。
         """
+        if name == "read_tool_result":
+            if artifacts is None:
+                return "操作未执行：会话归档不可用。"
+            try:
+                artifacts.validate_read(**args)
+            except (ValueError, TypeError, OSError):
+                return "操作未执行：归档 ID、分页参数或文件不可用。"
+            return None
+        if name not in {"read_resume", "analyze_resume", "update_resume", "delete_resume"}:
+            return "操作未执行：未知工具类别。"
         try:
             path = resume_path(workspace, args.get("path"))
         except ValueError as exc:

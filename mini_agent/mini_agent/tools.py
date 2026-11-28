@@ -29,6 +29,24 @@ TOOL_SCHEMAS = [
     ]
 ]
 
+TOOL_SCHEMAS.append({
+    "type": "function",
+    "function": {
+        "name": "read_tool_result",
+        "description": "按 result_id 分页读取当前会话的归档工具结果，不接受文件路径。offset 按字符计。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "result_id": {"type": "string"},
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 8000, "default": 4000},
+            },
+            "required": ["result_id"],
+            "additionalProperties": False,
+        },
+    },
+})
+
 
 def workspace_path(workspace, path):
     """解析文件路径，并确保它指向工作区下的文件位置。
@@ -78,11 +96,12 @@ def resume_path(workspace, path):
     return target
 
 
-def make_tools(workspace):
+def make_tools(workspace, *, artifacts=None):
     """创建绑定到指定工作区的工具映射。
 
     参数：
-        workspace: 工具可访问的根目录（Path）。
+        workspace: 简历工具可访问的根目录（Path）。
+        artifacts: 当前会话的归档存储；未提供时不装配分页读取工具。
 
     返回值：
         工具名到文件读写函数的映射。
@@ -186,9 +205,12 @@ def make_tools(workspace):
         source.unlink()
         return f"已删除 {source.relative_to(workspace.resolve())}。"
 
-    return {
+    tools = {
         "read_resume": read_resume,
         "analyze_resume": analyze_resume,
         "update_resume": update_resume,
         "delete_resume": delete_resume,
     }
+    if artifacts is not None:
+        tools["read_tool_result"] = artifacts.read_tool_result
+    return tools

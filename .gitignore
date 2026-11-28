@@ -59,6 +59,8 @@ credentials.json
 *.sqlite3
 uploads/
 /workspace/
+/.mini_agent/
+/knowledge/
 
 # ---------- 日志与临时文件 ----------
 *.log
